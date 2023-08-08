@@ -12,9 +12,13 @@ import multiprocessing
 import glob
 from tqdm import tqdm
 from waymo_open_dataset.protos import scenario_pb2
+from waymo_open_dataset.protos.scenario_pb2 import Scenario
+from waymo_open_dataset.protos.map_pb2 import Map,  MapFeature, MapPoint
 from waymo_types import object_type, lane_type, road_line_type, road_edge_type, signal_state, polyline_type
 
-    
+
+# gpus = tf.config.list_physical_devices('GPU')
+# tf.config.set_visible_devices(gpus[1:], 'GPU')    
 def decode_tracks_from_proto(tracks):
     track_infos = {
         'object_id': [],  # {0: unset, 1: vehicle, 2: pedestrian, 3: cyclist, 4: others}
@@ -42,7 +46,7 @@ def get_polyline_dir(polyline):
     return polyline_dir
 
 
-def decode_map_features_from_proto(map_features):
+def decode_map_features_from_proto(map_features : list[MapFeature]):
     map_infos = {
         'lane': [],
         'road_line': [],
@@ -129,7 +133,8 @@ def decode_map_features_from_proto(map_features):
             cur_polyline = np.concatenate((cur_polyline[:, 0:3], cur_polyline_dir, cur_polyline[:, 3:]), axis=-1)
 
             map_infos['speed_bump'].append(cur_info)
-
+        elif cur_data.driveway.ByteSize() > 0:
+            continue
         else:
             print(cur_data)
             raise ValueError
@@ -168,9 +173,12 @@ def decode_dynamic_map_states_from_proto(dynamic_map_states):
 
 
 def process_waymo_data_with_scenario_proto(data_file, output_path=None):
-    dataset = tf.data.TFRecordDataset(data_file, compression_type='')
+
+    dataset : tf.data.TFRecordDataset = tf.data.TFRecordDataset(data_file, compression_type='')
     ret_infos = []
-    for cnt, data in enumerate(dataset):
+    dataset_enumerated = enumerate(dataset)
+    print("Processing datafile %s" % (data_file,))
+    for cnt, data in dataset_enumerated:
         info = {}
         scenario = scenario_pb2.Scenario()
         scenario.ParseFromString(bytearray(data.numpy()))
@@ -205,6 +213,7 @@ def process_waymo_data_with_scenario_proto(data_file, output_path=None):
             pickle.dump(save_infos, f)
 
         ret_infos.append(info)
+    print("File %s contained %d scenario objects" % (data_file, len(ret_infos)))
     return ret_infos
 
 
@@ -251,7 +260,19 @@ def create_infos_from_protos(raw_data_path, output_path, num_workers=16):
     
 
 if __name__ == '__main__':
+    import argparse
+    parser : argparse.ArgumentParser = argparse.ArgumentParser(prog="Waymo To MTR", description="Convert Waymo formatted data into that used by MTR")
+    parser.add_argument("raw_data_path", type=str)
+    parser.add_argument("output_path", type=str)
+    parser.add_argument("--num-workers", type=int, default=-1)
+    parsed = parser.parse_args()
+    if parsed.num_workers<0:
+        num_workers=multiprocessing.cpu_count()
+    else:
+        num_workers = parsed.num_workers
+
     create_infos_from_protos(
-        raw_data_path=sys.argv[1],
-        output_path=sys.argv[2]
+        raw_data_path=parsed.raw_data_path,
+        output_path=parsed.output_path,
+        num_workers=num_workers
     )
