@@ -12,3 +12,4 @@ data/
 *.png
 *.html
 .vscode/
+mtr/version.py
