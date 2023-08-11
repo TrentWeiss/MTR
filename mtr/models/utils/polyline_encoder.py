@@ -42,6 +42,8 @@ class PointNetPolylineEncoder(nn.Module):
         batch_size, num_polylines,  num_points_each_polylines, C = polylines.shape
 
         # pre-mlp
+        # print(polylines[polylines_mask].shape)
+        # print(self.pre_mlps)
         polylines_feature_valid = self.pre_mlps(polylines[polylines_mask])  # (N, C)
         polylines_feature = polylines.new_zeros(batch_size, num_polylines,  num_points_each_polylines, polylines_feature_valid.shape[-1])
         polylines_feature[polylines_mask] = polylines_feature_valid

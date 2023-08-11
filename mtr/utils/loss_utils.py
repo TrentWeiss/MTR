@@ -37,6 +37,8 @@ def nll_loss_gmm_direct(pred_scores, pred_trajs, gt_trajs, gt_valid_mask, pre_ne
     nearest_mode_bs_idxs = torch.arange(batch_size).type_as(nearest_mode_idxs)  # (batch_size, 2)
 
     nearest_trajs = pred_trajs[nearest_mode_bs_idxs, nearest_mode_idxs]  # (batch_size, num_timestamps, 5)
+    # print(nearest_trajs[:, :, 0:2].shape)
+    # print(gt_trajs.shape)
     res_trajs = gt_trajs - nearest_trajs[:, :, 0:2]  # (batch_size, num_timestamps, 2)
     dx = res_trajs[:, :, 0]
     dy = res_trajs[:, :, 1]

@@ -185,6 +185,7 @@ def process_waymo_data_with_scenario_proto(data_file, output_path=None):
 
         info['scenario_id'] = scenario.scenario_id
         info['timestamps_seconds'] = list(scenario.timestamps_seconds)  # list of int of shape (91)
+        # print("scenario.current_time_index: %s" % (str(scenario.current_time_index),))
         info['current_time_index'] = scenario.current_time_index  # int, 10
         info['sdc_track_index'] = scenario.sdc_track_index  # int
         info['objects_of_interest'] = list(scenario.objects_of_interest)  # list, could be empty list
@@ -211,9 +212,10 @@ def process_waymo_data_with_scenario_proto(data_file, output_path=None):
         output_file = os.path.join(output_path, f'sample_{scenario.scenario_id}.pkl')
         with open(output_file, 'wb') as f:
             pickle.dump(save_infos, f)
-
+            #["trajs"].shape
+        # print(save_infos["track_infos"])
         ret_infos.append(info)
-    print("File %s contained %d scenario objects" % (data_file, len(ret_infos)))
+    # print("File %s contained %d scenario objects" % (data_file, len(ret_infos)))
     return ret_infos
 
 
