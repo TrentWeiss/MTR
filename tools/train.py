@@ -3,6 +3,7 @@
 # Written by Shaoshuai Shi 
 # All Rights Reserved
 
+import comet_ml
 import _init_path
 import argparse
 import datetime
@@ -22,6 +23,7 @@ from mtr.utils import common_utils
 from mtr.models import model as model_utils
 
 from train_utils.train_utils import train_model
+
 
 
 def parse_config():
@@ -224,6 +226,16 @@ def main():
     eval_output_dir = output_dir / 'eval' / 'eval_with_train'
     eval_output_dir.mkdir(parents=True, exist_ok=True)
 
+    comet_api_key=os.getenv("COMET_API_KEY")
+    if comet_api_key is None:
+        comet_experiment = None
+    else:
+        comet_experiment = comet_ml.Experiment(api_key=comet_api_key, workspace="electric-turtle", project_name="mtr-deepracing")
+        comet_experiment.log_asset(args.cfg_file, file_name="config.yaml", overwrite=True, copy_to_tmp=True)
+
+
+
+
     # -----------------------start training---------------------------
     logger.info('**********************Start training %s/%s(%s)**********************'
                 % (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
@@ -231,6 +243,7 @@ def main():
         model,
         optimizer,
         train_loader,
+        comet_experiment = comet_experiment,
         optim_cfg=cfg.OPTIMIZATION,
         start_epoch=start_epoch,
         total_epochs=args.epochs,

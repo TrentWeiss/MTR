@@ -9,11 +9,13 @@ import os
 import torch
 import tqdm
 from torch.nn.utils import clip_grad_norm_
+import comet_ml
 
 
 def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
                     rank, tbar, total_it_each_epoch, dataloader_iter, tb_log=None, leave_pbar=False, scheduler=None, show_grad_curve=False,
-                    logger=None, logger_iter_interval=50, cur_epoch=None, total_epochs=None, ckpt_save_dir=None, ckpt_save_time_interval=300):
+                    logger=None, logger_iter_interval=50, cur_epoch=None, total_epochs=None, ckpt_save_dir=None, ckpt_save_time_interval=300,
+                    comet_experiment : comet_ml.Experiment | None = None):
     if total_it_each_epoch == len(train_loader):
         dataloader_iter = iter(train_loader)
 
@@ -24,7 +26,7 @@ def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
 
     ckpt_save_cnt = 1
     start_it = accumulated_iter % total_it_each_epoch
-
+    
     for cur_it in range(start_it, total_it_each_epoch):
         try:
             batch = next(dataloader_iter)
@@ -64,6 +66,7 @@ def train_one_epoch(model, optimizer, train_loader, accumulated_iter, optim_cfg,
         disp_dict.update({'loss': loss.item(), 'lr': cur_lr})
 
         # log to console and tensorboard
+        #TODO : Log all of the other loss schtuff with comet 
         if rank == 0:
             if accumulated_iter % logger_iter_interval == 0 or cur_it == start_it or cur_it + 1 == total_it_each_epoch:
                 trained_time_past_all = tbar.format_dict['elapsed']
@@ -123,7 +126,7 @@ def train_model(model, optimizer, train_loader, optim_cfg,
                 start_epoch, total_epochs, start_iter, rank, ckpt_save_dir, train_sampler=None,
                 ckpt_save_interval=1, max_ckpt_save_num=50, merge_all_iters_to_one_epoch=False, tb_log=None,
                 scheduler=None, test_loader=None, logger=None, eval_output_dir=None, cfg=None, dist_train=False,
-                logger_iter_interval=50, ckpt_save_time_interval=300):
+                logger_iter_interval=50, ckpt_save_time_interval=300, comet_experiment : comet_ml.Experiment | None = None):
     accumulated_iter = start_iter
     with tqdm.trange(start_epoch, total_epochs, desc='epochs', dynamic_ncols=True, leave=(rank == 0)) as tbar:
         total_it_each_epoch = len(train_loader)
@@ -140,7 +143,8 @@ def train_model(model, optimizer, train_loader, optim_cfg,
 
             if scheduler is None:
                 learning_rate_decay(cur_epoch, optimizer, optim_cfg)
-
+            if comet_experiment is not None:
+                comet_experiment.set_epoch(cur_epoch+1)
             # train one epoch
             accumulated_iter = train_one_epoch(
                 model, optimizer, train_loader,
@@ -151,12 +155,13 @@ def train_model(model, optimizer, train_loader, optim_cfg,
                 dataloader_iter=dataloader_iter,
                 scheduler=scheduler, cur_epoch=cur_epoch, total_epochs=total_epochs,
                 logger=logger, logger_iter_interval=logger_iter_interval,
-                ckpt_save_dir=ckpt_save_dir, ckpt_save_time_interval=ckpt_save_time_interval
+                ckpt_save_dir=ckpt_save_dir, ckpt_save_time_interval=ckpt_save_time_interval,
+                comet_experiment=comet_experiment
             )
 
             # save trained model
             trained_epoch = cur_epoch + 1
-            if (trained_epoch % ckpt_save_interval == 0 or trained_epoch in [1, 2, 4] or trained_epoch > total_epochs - 10) and rank == 0:
+            if (trained_epoch % ckpt_save_interval ) == 0:
 
                 ckpt_list = glob.glob(str(ckpt_save_dir / 'checkpoint_epoch_*.pth'))
                 ckpt_list.sort(key=os.path.getmtime)
@@ -166,9 +171,18 @@ def train_model(model, optimizer, train_loader, optim_cfg,
                         os.remove(ckpt_list[cur_file_idx])
 
                 ckpt_name = ckpt_save_dir / ('checkpoint_epoch_%d' % trained_epoch)
+                ckpt_dict : dict = checkpoint_state(model, optimizer, trained_epoch, accumulated_iter)
                 save_checkpoint(
-                    checkpoint_state(model, optimizer, trained_epoch, accumulated_iter), filename=ckpt_name,
+                    ckpt_dict, filename=ckpt_name,
                 )
+                if comet_experiment is not None:
+                    comet_model_file : str = os.path.join(ckpt_save_dir, "model_comet.pt")
+                    comet_optimizer_file : str = os.path.join(ckpt_save_dir, "optimizer_comet.pt")
+                    torch.save(ckpt_dict['model_state'], comet_model_file)
+                    torch.save(ckpt_dict['optimizer_state'], comet_optimizer_file)
+                    comet_experiment.log_asset(comet_model_file, file_name="model_epoch_{}.pt".format(trained_epoch))
+                    comet_experiment.log_asset(comet_optimizer_file, file_name="optimizer_epoch_{}.pt".format(trained_epoch))
+
 
             # eval the model
             if test_loader is not None and (trained_epoch % ckpt_save_interval == 0 or trained_epoch in [1, 2, 4] or trained_epoch > total_epochs - 10):
