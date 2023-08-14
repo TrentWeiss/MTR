@@ -185,24 +185,24 @@ def main():
         it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist_train, optimizer=optimizer,
                                                            logger=logger)
         last_epoch = start_epoch + 1
-    else:
-        ckpt_list = glob.glob(str(ckpt_dir / '*.pth'))
-        if len(ckpt_list) > 0:
-            ckpt_list.sort(key=os.path.getmtime)
-            while len(ckpt_list) > 0:
-                basename = os.path.basename(ckpt_list[-1])
-                if basename == 'best_model.pth':
-                    ckpt_list = ckpt_list[:-1]
-                    continue
+    # else:
+    #     ckpt_list = glob.glob(str(ckpt_dir / '*.pth'))
+    #     if len(ckpt_list) > 0:
+    #         ckpt_list.sort(key=os.path.getmtime)
+    #         while len(ckpt_list) > 0:
+    #             basename = os.path.basename(ckpt_list[-1])
+    #             if basename == 'best_model.pth':
+    #                 ckpt_list = ckpt_list[:-1]
+    #                 continue
 
-                try:
-                    it, start_epoch = model.load_params_with_optimizer(
-                        ckpt_list[-1], to_cpu=dist_train, optimizer=optimizer, logger=logger
-                    )
-                    last_epoch = start_epoch + 1
-                    break
-                except:
-                    ckpt_list = ckpt_list[:-1]
+    #             try:
+    #                 it, start_epoch = model.load_params_with_optimizer(
+    #                     ckpt_list[-1], to_cpu=dist_train, optimizer=optimizer, logger=logger
+    #                 )
+    #                 last_epoch = start_epoch + 1
+    #                 break
+    #             except:
+    #                 ckpt_list = ckpt_list[:-1]
 
     scheduler = build_scheduler(
         optimizer, train_loader, cfg.OPTIMIZATION, total_epochs=args.epochs,
@@ -232,9 +232,8 @@ def main():
     else:
         comet_experiment = comet_ml.Experiment(api_key=comet_api_key, workspace="electric-turtle", project_name="mtr-deepracing")
         comet_experiment.log_asset(args.cfg_file, file_name="config.yaml", overwrite=True, copy_to_tmp=True)
-
-
-
+        clusterfile = os.path.join(cfg.ROOT_DIR, cfg["MODEL"]["MOTION_DECODER"]["INTENTION_POINTS_FILE"])
+        comet_experiment.log_asset(clusterfile, file_name="clusters.pkl", overwrite=True, copy_to_tmp=True)
 
     # -----------------------start training---------------------------
     logger.info('**********************Start training %s/%s(%s)**********************'
