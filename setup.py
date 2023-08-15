@@ -26,7 +26,6 @@ def make_cuda_ext(name, module, sources):
     extra_library_dirs.append(os.path.join(sys.base_prefix, "lib"))
     extra_libraries = []
     extra_libraries.append(pythonversionstring)
-    print(extra_include_dirs)
     cuda_ext = CUDAExtension(
         name='%s.%s' % (module, name),
         sources=[os.path.join(*module.split('.'), src) for src in sources],
