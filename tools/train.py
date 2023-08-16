@@ -33,6 +33,7 @@ def parse_config():
     parser.add_argument('--batch_size', type=int, default=None, required=False, help='batch size for training')
     parser.add_argument('--epochs', type=int, default=None, required=False, help='number of epochs to train for')
     parser.add_argument('--workers', type=int, default=8, help='number of workers for dataloader')
+    parser.add_argument('--output_dir', type=str, default=None, help='Where to put model files')
     parser.add_argument('--extra_tag', type=str, default='default', help='extra tag for this experiment')
     parser.add_argument('--ckpt', type=str, default=None, help='checkpoint to start from')
     parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
@@ -40,7 +41,7 @@ def parse_config():
     parser.add_argument('--tcp_port', type=int, default=18888, help='tcp port for distrbuted training')
     parser.add_argument('--without_sync_bn', action='store_true', default=False, help='whether to use sync bn')
     parser.add_argument('--fix_random_seed', action='store_true', default=False, help='')
-    parser.add_argument('--ckpt_save_interval', type=int, default=2, help='number of training epochs')
+    parser.add_argument('--ckpt_save_interval', type=int, default=10, help='number of training epochs')
     parser.add_argument('--local_rank', type=int, default=None, help='local rank for distributed training')
     parser.add_argument('--max_ckpt_save_num', type=int, default=5, help='max number of saved checkpoint')
     parser.add_argument('--merge_all_iters_to_one_epoch', action='store_true', default=False, help='')
@@ -133,8 +134,24 @@ def main():
 
     if args.fix_random_seed:
         common_utils.set_random_seed(666)
+    
+    comet_api_key=os.getenv("COMET_API_KEY")
+    if comet_api_key is None:
+        comet_experiment = None
+        comet_outdir_postfix = ""
+    else:
+        comet_experiment = comet_ml.Experiment(api_key=comet_api_key, workspace="electric-turtle", project_name="mtr-deepracing")
+        comet_experiment.log_asset(args.cfg_file, file_name="config.yaml", overwrite=True, copy_to_tmp=True)
+        clusterfile = os.path.join(cfg.ROOT_DIR, cfg["MODEL"]["MOTION_DECODER"]["INTENTION_POINTS_FILE"])
+        comet_experiment.log_asset(clusterfile, file_name="clusters.pkl", overwrite=True, copy_to_tmp=True)
+        comet_outdir_postfix = "_" + comet_experiment.get_name()
 
-    output_dir = cfg.ROOT_DIR / 'output' / cfg.EXP_GROUP_PATH / cfg.TAG / args.extra_tag
+    output_dir_base : str | None = args.output_dir
+    if output_dir_base is None:
+        output_dir = Path(os.path.join(*[cfg.ROOT_DIR, 'output', cfg.EXP_GROUP_PATH, cfg.TAG, (args.extra_tag + comet_outdir_postfix)]))
+    else:
+        output_dir = Path(os.path.join(*[output_dir_base, cfg.EXP_GROUP_PATH, cfg.TAG, (args.extra_tag + comet_outdir_postfix)]))
+        
     ckpt_dir = output_dir / 'ckpt'
     output_dir.mkdir(parents=True, exist_ok=True)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
@@ -154,7 +171,7 @@ def main():
     log_config_to_file(cfg, logger=logger)
     if cfg.LOCAL_RANK == 0:
         os.system('cp %s %s' % (args.cfg_file, output_dir))
-    tb_log = SummaryWriter(log_dir=str(output_dir / 'tensorboard')) if cfg.LOCAL_RANK == 0 else None
+    tb_log = SummaryWriter(log_dir=output_dir / 'tensorboard') if cfg.LOCAL_RANK == 0 else None
 
     train_set, train_loader, train_sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
@@ -226,14 +243,6 @@ def main():
     eval_output_dir = output_dir / 'eval' / 'eval_with_train'
     eval_output_dir.mkdir(parents=True, exist_ok=True)
 
-    comet_api_key=os.getenv("COMET_API_KEY")
-    if comet_api_key is None:
-        comet_experiment = None
-    else:
-        comet_experiment = comet_ml.Experiment(api_key=comet_api_key, workspace="electric-turtle", project_name="mtr-deepracing")
-        comet_experiment.log_asset(args.cfg_file, file_name="config.yaml", overwrite=True, copy_to_tmp=True)
-        clusterfile = os.path.join(cfg.ROOT_DIR, cfg["MODEL"]["MOTION_DECODER"]["INTENTION_POINTS_FILE"])
-        comet_experiment.log_asset(clusterfile, file_name="clusters.pkl", overwrite=True, copy_to_tmp=True)
 
     # -----------------------start training---------------------------
     logger.info('**********************Start training %s/%s(%s)**********************'

@@ -161,8 +161,9 @@ def train_model(model, optimizer, train_loader, optim_cfg,
 
             # save trained model
             trained_epoch = cur_epoch + 1
-            if (trained_epoch % ckpt_save_interval ) == 0:
+            if (trained_epoch in [1,2,5]) or (trained_epoch % ckpt_save_interval ) == 0:
 
+                print("Saving checkpoint")
                 ckpt_list = glob.glob(str(ckpt_save_dir / 'checkpoint_epoch_*.pth'))
                 ckpt_list.sort(key=os.path.getmtime)
 
@@ -176,12 +177,14 @@ def train_model(model, optimizer, train_loader, optim_cfg,
                     ckpt_dict, filename=ckpt_name,
                 )
                 if comet_experiment is not None:
-                    comet_model_file : str = os.path.join(ckpt_save_dir, "model_comet.pt")
-                    comet_optimizer_file : str = os.path.join(ckpt_save_dir, "optimizer_comet.pt")
+                    comet_model_file : str = os.path.join(ckpt_save_dir, "model_comet_epoch_%d.pt" % (trained_epoch,))
+                    comet_optimizer_file : str = os.path.join(ckpt_save_dir, "optimizer_comet_epoch_%d.pt" % (trained_epoch,))
+                    print("Saving model file to %s" % (comet_model_file,))
                     torch.save(ckpt_dict['model_state'], comet_model_file)
+                    print("Saving optimizer file to %s" % (comet_optimizer_file,))
                     torch.save(ckpt_dict['optimizer_state'], comet_optimizer_file)
-                    comet_experiment.log_asset(comet_model_file, file_name="model_epoch_{}.pt".format(trained_epoch))
-                    comet_experiment.log_asset(comet_optimizer_file, file_name="optimizer_epoch_{}.pt".format(trained_epoch))
+                    comet_experiment.log_asset(comet_model_file, file_name="model_epoch_{}.pt".format(trained_epoch), copy_to_tmp=False)
+                    comet_experiment.log_asset(comet_optimizer_file, file_name="optimizer_epoch_{}.pt".format(trained_epoch), copy_to_tmp=False)
 
 
             # eval the model
@@ -199,7 +202,7 @@ def train_model(model, optimizer, train_loader, optim_cfg,
                         tb_log.add_scalar('eval/' + key, val, trained_epoch)
 
                     if 'mAP' in tb_dict:
-                        best_record_file = eval_output_dir / ('best_eval_record.txt')
+                        best_record_file = eval_output_dir / 'best_eval_record.txt'
 
                         try:
                             with open(best_record_file, 'r') as f:
