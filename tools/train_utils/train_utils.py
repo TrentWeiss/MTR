@@ -143,7 +143,7 @@ def train_model(model, optimizer, train_loader, optim_cfg,
 
             if scheduler is None:
                 learning_rate_decay(cur_epoch, optimizer, optim_cfg)
-            if comet_experiment is not None:
+            if (comet_experiment is not None):
                 comet_experiment.set_epoch(cur_epoch+1)
             # train one epoch
             accumulated_iter = train_one_epoch(
@@ -176,7 +176,7 @@ def train_model(model, optimizer, train_loader, optim_cfg,
                 save_checkpoint(
                     ckpt_dict, filename=ckpt_name,
                 )
-                if comet_experiment is not None:
+                if (comet_experiment is not None):
                     comet_model_file : str = os.path.join(ckpt_save_dir, "model_comet_epoch_%d.pt" % (trained_epoch,))
                     comet_optimizer_file : str = os.path.join(ckpt_save_dir, "optimizer_comet_epoch_%d.pt" % (trained_epoch,))
                     print("Saving model file to %s" % (comet_model_file,))

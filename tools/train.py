@@ -23,7 +23,7 @@ from mtr.utils import common_utils
 from mtr.models import model as model_utils
 
 from train_utils.train_utils import train_model
-
+import torch.distributed as dist
 
 
 def parse_config():
@@ -136,21 +136,31 @@ def main():
         common_utils.set_random_seed(666)
     
     comet_api_key=os.getenv("COMET_API_KEY")
+    broadcastlist = [None]
     if comet_api_key is None:
         comet_experiment = None
-        comet_outdir_postfix = ""
+        broadcastlist[0] = ""
     else:
-        comet_experiment = comet_ml.Experiment(api_key=comet_api_key, workspace="electric-turtle", project_name="mtr-deepracing")
-        comet_experiment.log_asset(args.cfg_file, file_name="config.yaml", overwrite=True, copy_to_tmp=True)
-        clusterfile = os.path.join(cfg.ROOT_DIR, cfg["MODEL"]["MOTION_DECODER"]["INTENTION_POINTS_FILE"])
-        comet_experiment.log_asset(clusterfile, file_name="clusters.pkl", overwrite=True, copy_to_tmp=True)
-        comet_outdir_postfix = "_" + comet_experiment.get_name()
+        if (not dist_train) or (dist_train and cfg.LOCAL_RANK==0):
+            comet_experiment = comet_ml.Experiment(api_key=comet_api_key, workspace="electric-turtle", project_name="mtr-deepracing", auto_output_logging="simple")
+            comet_experiment.log_asset(args.cfg_file, file_name="config.yaml", overwrite=True, copy_to_tmp=True)
+            clusterfile = os.path.join(cfg.ROOT_DIR, cfg["MODEL"]["MOTION_DECODER"]["INTENTION_POINTS_FILE"])
+            comet_experiment.log_asset(clusterfile, file_name="clusters.pkl", overwrite=True, copy_to_tmp=True)
+            comet_outdir_postfix = "_" + comet_experiment.get_name()
+            broadcastlist[0]=comet_outdir_postfix
+        elif dist_train and cfg.LOCAL_RANK!=0:
+            comet_experiment = None
+        if dist_train:
+            dist.broadcast_object_list(broadcastlist, src=0)
+
+
+
 
     output_dir_base : str | None = args.output_dir
     if output_dir_base is None:
-        output_dir = Path(os.path.join(*[cfg.ROOT_DIR, 'output', cfg.EXP_GROUP_PATH, cfg.TAG, (args.extra_tag + comet_outdir_postfix)]))
+        output_dir = Path(os.path.join(*[cfg.ROOT_DIR, 'output', cfg.EXP_GROUP_PATH, cfg.TAG, (args.extra_tag + broadcastlist[0])]))
     else:
-        output_dir = Path(os.path.join(*[output_dir_base, cfg.EXP_GROUP_PATH, cfg.TAG, (args.extra_tag + comet_outdir_postfix)]))
+        output_dir = Path(os.path.join(*[output_dir_base, cfg.EXP_GROUP_PATH, cfg.TAG, (args.extra_tag + broadcastlist[0])]))
         
     ckpt_dir = output_dir / 'ckpt'
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -173,6 +183,7 @@ def main():
         os.system('cp %s %s' % (args.cfg_file, output_dir))
     tb_log = SummaryWriter(log_dir=output_dir / 'tensorboard') if cfg.LOCAL_RANK == 0 else None
 
+    
     train_set, train_loader, train_sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
         batch_size=args.batch_size,
