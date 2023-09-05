@@ -1,7 +1,7 @@
 DATA_CONFIG:
     DATASET: WaymoDataset
     OBJECT_TYPE: &object_type ['TYPE_VEHICLE']
-    DATA_ROOT: '/p/DeepRacing/deepracingbags/offsetlines/mtr_formatted'
+    DATA_ROOT: '/p/DeepRacing/mtr_formatted/onlinemultiplayer'
     SPLIT_DIR: {
         'train': 'processed_scenarios_training', 
         'test': 'processed_scenarios_validation'
