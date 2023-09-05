@@ -3,6 +3,9 @@
 # Written by Shaoshuai Shi 
 # All Rights Reserved
 
+import sys
+
+import yaml
 import comet_ml
 import _init_path
 import argparse
@@ -137,19 +140,17 @@ def main():
     
     comet_api_key=os.getenv("COMET_API_KEY")
     broadcastlist = [None]
+    comet_experiment = None
     if comet_api_key is None:
-        comet_experiment = None
         broadcastlist[0] = ""
     else:
         if (not dist_train) or (dist_train and cfg.LOCAL_RANK==0):
             comet_experiment = comet_ml.Experiment(api_key=comet_api_key, workspace="electric-turtle", project_name="mtr-deepracing", auto_output_logging="simple")
-            comet_experiment.log_asset(args.cfg_file, file_name="config.yaml", overwrite=True, copy_to_tmp=True)
+            comet_experiment.log_asset(args.cfg_file, file_name="config.yaml", overwrite=True, copy_to_tmp=False)
             clusterfile = os.path.join(cfg.ROOT_DIR, cfg["MODEL"]["MOTION_DECODER"]["INTENTION_POINTS_FILE"])
-            comet_experiment.log_asset(clusterfile, file_name="clusters.pkl", overwrite=True, copy_to_tmp=True)
+            comet_experiment.log_asset(clusterfile, file_name="clusters.pkl", overwrite=True, copy_to_tmp=False)
             comet_outdir_postfix = "_" + comet_experiment.get_name()
             broadcastlist[0]=comet_outdir_postfix
-        elif dist_train and cfg.LOCAL_RANK!=0:
-            comet_experiment = None
         if dist_train:
             dist.broadcast_object_list(broadcastlist, src=0)
 
@@ -161,11 +162,21 @@ def main():
         output_dir = Path(os.path.join(*[cfg.ROOT_DIR, 'output', cfg.EXP_GROUP_PATH, cfg.TAG, (args.extra_tag + broadcastlist[0])]))
     else:
         output_dir = Path(os.path.join(*[output_dir_base, cfg.EXP_GROUP_PATH, cfg.TAG, (args.extra_tag + broadcastlist[0])]))
-        
+      
     ckpt_dir = output_dir / 'ckpt'
     output_dir.mkdir(parents=True, exist_ok=True)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
-
+    try:
+        if comet_experiment is not None:
+            argdict = vars(args)
+            command_arg_file = os.path.join(output_dir, "command_line_args.yaml")
+            with open(command_arg_file, "w") as f:
+                yaml.dump(argdict, f, Dumper=yaml.SafeDumper)
+            comet_experiment.log_asset(command_arg_file, file_name="command_line_args.yaml", overwrite=True, copy_to_tmp=False)
+    except Exception as e:
+        print("Couldn't save command line args. Underlying exception:\n%s" % (str(e),), file=sys.stderr)
+    if dist_train:
+        dist.barrier()
     log_file = output_dir / ('log_train_%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
     logger = common_utils.create_logger(log_file, rank=cfg.LOCAL_RANK)
 
