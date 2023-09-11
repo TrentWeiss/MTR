@@ -107,15 +107,15 @@ def test_model(comet_experiment : str, tempdir : str, save_all : bool):
                     "min_ade" : min_ade,
                     "computation_time" : computation_time
                 }, f, Dumper=yaml.SafeDumper)
-        computation_time_array : np.ndarray = np.asarray(computation_time_list)
-        min_ade_array : np.ndarray = np.asarray(min_ade_list)
-        with open(os.path.join(plotdir, "summary.yaml"), "w") as f:
-            yaml.dump({
-                "min_ade" : np.mean(min_ade_array),
-                "min_ade_stdev" : np.std(min_ade_array),
-                "computation_time" : np.mean(computation_time_array),
-                "computation_time_stdev" : np.std(computation_time_array),
-            }, f, Dumper=yaml.SafeDumper)
+    computation_time_array : np.ndarray = np.asarray(computation_time_list)
+    min_ade_array : np.ndarray = np.asarray(min_ade_list)
+    with open(os.path.join(plotdir, "summary.yaml"), "w") as f:
+        yaml.dump({
+            "min_ade" : float(np.mean(min_ade_array)),
+            "min_ade_stdev" : float(np.std(min_ade_array)),
+            "computation_time" : float(np.mean(computation_time_array)),
+            "computation_time_stdev" : float(np.std(computation_time_array)),
+        }, f, Dumper=yaml.SafeDumper)
 
         # exit(0)
 if __name__=="__main__":
