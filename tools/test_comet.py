@@ -65,6 +65,7 @@ def test_model(comet_experiment : str, tempdir : str, batch_size : int, save_eve
     model.cuda(gpu_index)
     first_param : torch.nn.Parameter = next(model.parameters())
     min_ade_array = torch.empty(num_samples, dtype=first_param.dtype, device=first_param.device)
+    min_ade_index_array = torch.empty(num_samples, dtype=torch.int64, device=first_param.device)
     computation_time_list = []
     for (i, batch_dict) in enumerate(val_loader):
         batch_pred_dicts : dict = model(batch_dict)
@@ -109,13 +110,11 @@ def test_model(comet_experiment : str, tempdir : str, batch_size : int, save_eve
         batchdim = center_gt_trajs_torch.shape[0]
         array_idx_end = array_idx+batchdim
         if array_idx_end>=min_ade_array.shape[0]:
-            min_ade_array[array_idx:]=ade.min(dim=-1)[0].clone()
+            torch.min(ade, dim=-1, out=(min_ade_array[array_idx:], min_ade_index_array[array_idx:]))
         else:
-            min_ade_array[array_idx:array_idx_end]=ade.min(dim=-1)[0].clone()
+            torch.min(ade, dim=-1, out=(min_ade_array[array_idx:array_idx_end], min_ade_index_array[array_idx:array_idx_end]))
         array_idx=array_idx_end
-        # min_ade_array[array_idx:array_idx+batchdim]=min_ade.clone()
-        # for j in range(batchdim):
-        #     min_ade_list.append(min_ade[j].item())
+
         computation_time_list.append(computation_time)
         if save_every>0 and ((i%save_every)==0):
             fig : matplotlib.figure.Figure = plt.figure()
@@ -133,7 +132,7 @@ def test_model(comet_experiment : str, tempdir : str, batch_size : int, save_eve
                 yaml.dump({
                     "ade" : ade[-1].tolist(),
                     "scores" : pred_scores_torch[-1].tolist(),
-                    "min_ade" : min_ade_array[-1].item(),
+                    "min_ade" : min_ade_array[array_idx_end-1].item(),
                     "computation_time" : computation_time_list[-1]
                 }, f, Dumper=yaml.SafeDumper)
     computation_time_array : np.ndarray = np.asarray(computation_time_list)
