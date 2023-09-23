@@ -16,9 +16,7 @@ from waymo_open_dataset.protos.scenario_pb2 import Scenario
 from waymo_open_dataset.protos.map_pb2 import Map,  MapFeature, MapPoint
 from waymo_types import object_type, lane_type, road_line_type, road_edge_type, signal_state, polyline_type
 
-
-# gpus = tf.config.list_physical_devices('GPU')
-# tf.config.set_visible_devices(gpus[1:], 'GPU')    
+tf.config.set_visible_devices([], "GPU")  
 def decode_tracks_from_proto(tracks):
     track_infos = {
         'object_id': [],  # {0: unset, 1: vehicle, 2: pedestrian, 3: cyclist, 4: others}
@@ -239,7 +237,9 @@ def get_infos_from_protos(data_path, output_path=None, num_workers=8):
     return all_infos
 
 
-def create_infos_from_protos(raw_data_path, output_path, num_workers=16):
+def create_infos_from_protos(raw_data_path, output_path, num_workers=16, spawn=False):
+    if spawn:
+        multiprocessing.set_start_method("spawn")
     train_infos = get_infos_from_protos(
         data_path=os.path.join(raw_data_path, 'training'),
         output_path=os.path.join(output_path, 'processed_scenarios_training'),
@@ -267,6 +267,7 @@ if __name__ == '__main__':
     parser.add_argument("raw_data_path", type=str)
     parser.add_argument("output_path", type=str)
     parser.add_argument("--num-workers", type=int, default=-1)
+    parser.add_argument("--spawn", action="store_true", help="Use spawn to create new processes instead of fork")
     parsed = parser.parse_args()
     if parsed.num_workers<0:
         num_workers=multiprocessing.cpu_count()
@@ -276,5 +277,6 @@ if __name__ == '__main__':
     create_infos_from_protos(
         raw_data_path=parsed.raw_data_path,
         output_path=parsed.output_path,
+        spawn=parsed.spawn,
         num_workers=num_workers
     )
