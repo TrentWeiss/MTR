@@ -6,7 +6,7 @@
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from mtr.utils import common_utils
 
 from .waymo.waymo_dataset import WaymoDataset
@@ -17,7 +17,7 @@ __all__ = {
 }
 
 
-def build_dataloader(dataset_cfg, batch_size, dist, workers=4,
+def build_dataloader(dataset_cfg, batch_size, dist, workers=4, subset_indices = None,
                      logger=None, training=True, merge_all_iters_to_one_epoch=False, total_epochs=0, add_worker_init_fn=False):
     
     def worker_init_fn_(worker_id):
@@ -45,8 +45,12 @@ def build_dataloader(dataset_cfg, batch_size, dist, workers=4,
         sampler = None
 
     drop_last = dataset_cfg.get('DATALOADER_DROP_LAST', False) and training
+    if subset_indices is not None:
+        dataset_ = Subset(dataset, subset_indices)
+    else:
+        dataset_ = dataset
     dataloader = DataLoader(
-        dataset, batch_size=batch_size, pin_memory=True, num_workers=workers,
+        dataset_, batch_size=batch_size, pin_memory=True, num_workers=workers,
         shuffle=(sampler is None) and training, collate_fn=dataset.collate_batch,
         drop_last=drop_last, sampler=sampler, timeout=0, 
         worker_init_fn=worker_init_fn_ if add_worker_init_fn and training else None
