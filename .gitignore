@@ -13,3 +13,4 @@ data/
 *.html
 .vscode/
 mtr/version.py
+COLCON_IGNORE
