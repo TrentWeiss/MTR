@@ -1,7 +1,7 @@
 DATA_CONFIG:
     DATASET: WaymoDataset
     OBJECT_TYPE: &object_type ['TYPE_VEHICLE']
-    DATA_ROOT: '/p/DeepRacing/unpacked_datasets/filtered/v3/mtr_format'
+    DATA_ROOT: '/p/DeepRacing/unpacked_datasets/aligned_to_ego/v2/mtr_format'
     SPLIT_DIR: {
         'train': 'processed_scenarios_training', 
         'test': 'processed_scenarios_validation'
@@ -56,7 +56,7 @@ MODEL:
         OBJECT_TYPE: *object_type 
         CENTER_OFFSET_OF_MAP: *center_offset
 
-        NUM_FUTURE_FRAMES: 30
+        NUM_FUTURE_FRAMES: 80
         NUM_MOTION_MODES: 6
 
         INTENTION_POINTS_FILE: data/deepracing/cluster_64_center_dict.pkl

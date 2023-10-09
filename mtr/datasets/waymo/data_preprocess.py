@@ -7,6 +7,8 @@
 import sys, os
 import numpy as np
 import pickle
+
+import yaml
 import tensorflow as tf
 import multiprocessing
 import glob
@@ -176,11 +178,21 @@ def process_waymo_data_with_scenario_proto(data_file, output_path=None):
     ret_infos = []
     dataset_enumerated = enumerate(dataset)
     print("Processing datafile %s" % (data_file,))
+    data_dir = os.path.dirname(data_file)
+    data_file_base = os.path.basename(data_file)
+    _, data_file_ext = os.path.splitext(data_file_base)
+    deepracing_metadata_file = os.path.join(data_dir, data_file_ext[1:]+".metadata.yaml")
+    with open(deepracing_metadata_file, "r") as f:
+        deepracing_metadata : dict = yaml.load(f, Loader=yaml.SafeLoader)
+    idx_start : int =deepracing_metadata["idx_start"]
+    deepracing_file : str =deepracing_metadata["deepracing_file"]
     for cnt, data in dataset_enumerated:
         info = {}
         scenario = scenario_pb2.Scenario()
         scenario.ParseFromString(bytearray(data.numpy()))
 
+        info['deepracing_idx'] = idx_start + cnt
+        info['deepracing_file'] = deepracing_file
         info['scenario_id'] = scenario.scenario_id
         info['timestamps_seconds'] = list(scenario.timestamps_seconds)  # list of int of shape (91)
         # print("scenario.current_time_index: %s" % (str(scenario.current_time_index),))

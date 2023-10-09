@@ -14,6 +14,22 @@ from mtr.models.utils import polyline_encoder
 from mtr.utils import common_utils
 from mtr.ops.knn import knn_utils
 
+def build_polyline_encoder(in_channels, hidden_dim, num_layers, num_pre_layers=1, out_channels=None):
+    ret_polyline_encoder = polyline_encoder.PointNetPolylineEncoder(
+        in_channels=in_channels,
+        hidden_dim=hidden_dim,
+        num_layers=num_layers,
+        num_pre_layers=num_pre_layers,
+        out_channels=out_channels
+    )
+    return ret_polyline_encoder
+
+def build_transformer_encoder_layer(d_model, nhead, dropout=0.1, normalize_before=False, use_local_attn=False):
+    single_encoder_layer = transformer_encoder_layer.TransformerEncoderLayer(
+        d_model=d_model, nhead=nhead, dim_feedforward=d_model * 4, dropout=dropout,
+        normalize_before=normalize_before, use_local_attn=use_local_attn
+    )
+    return single_encoder_layer
 
 class MTREncoder(nn.Module):
     def __init__(self, config):
@@ -21,13 +37,13 @@ class MTREncoder(nn.Module):
         self.model_cfg = config
 
         # build polyline encoders
-        self.agent_polyline_encoder = self.build_polyline_encoder(
+        self.agent_polyline_encoder = build_polyline_encoder(
             in_channels=self.model_cfg.NUM_INPUT_ATTR_AGENT + 1,
             hidden_dim=self.model_cfg.NUM_CHANNEL_IN_MLP_AGENT,
             num_layers=self.model_cfg.NUM_LAYER_IN_MLP_AGENT,
             out_channels=self.model_cfg.D_MODEL
         )
-        self.map_polyline_encoder = self.build_polyline_encoder(
+        self.map_polyline_encoder = build_polyline_encoder(
             in_channels=self.model_cfg.NUM_INPUT_ATTR_MAP,
             hidden_dim=self.model_cfg.NUM_CHANNEL_IN_MLP_MAP,
             num_layers=self.model_cfg.NUM_LAYER_IN_MLP_MAP,
@@ -39,7 +55,7 @@ class MTREncoder(nn.Module):
         self.use_local_attn = self.model_cfg.get('USE_LOCAL_ATTN', False)
         self_attn_layers = []
         for _ in range(self.model_cfg.NUM_ATTN_LAYERS):
-            self_attn_layers.append(self.build_transformer_encoder_layer(
+            self_attn_layers.append(build_transformer_encoder_layer(
                 d_model=self.model_cfg.D_MODEL,
                 nhead=self.model_cfg.NUM_ATTN_HEAD,
                 dropout=self.model_cfg.get('DROPOUT_OF_ATTN', 0.1),
@@ -50,22 +66,6 @@ class MTREncoder(nn.Module):
         self.self_attn_layers = nn.ModuleList(self_attn_layers)
         self.num_out_channels = self.model_cfg.D_MODEL
 
-    def build_polyline_encoder(self, in_channels, hidden_dim, num_layers, num_pre_layers=1, out_channels=None):
-        ret_polyline_encoder = polyline_encoder.PointNetPolylineEncoder(
-            in_channels=in_channels,
-            hidden_dim=hidden_dim,
-            num_layers=num_layers,
-            num_pre_layers=num_pre_layers,
-            out_channels=out_channels
-        )
-        return ret_polyline_encoder
-
-    def build_transformer_encoder_layer(self, d_model, nhead, dropout=0.1, normalize_before=False, use_local_attn=False):
-        single_encoder_layer = transformer_encoder_layer.TransformerEncoderLayer(
-            d_model=d_model, nhead=nhead, dim_feedforward=d_model * 4, dropout=dropout,
-            normalize_before=normalize_before, use_local_attn=use_local_attn
-        )
-        return single_encoder_layer
 
     def apply_global_attn(self, x, x_mask, x_pos):
         """

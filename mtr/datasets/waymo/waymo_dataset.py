@@ -12,13 +12,12 @@ import torch
 
 from mtr.datasets.dataset import DatasetTemplate
 from mtr.utils import common_utils
-from mtr.config import cfg
 
 
 class WaymoDataset(DatasetTemplate):
     def __init__(self, dataset_cfg, training=True, logger=None):
         super().__init__(dataset_cfg=dataset_cfg, training=training, logger=logger)
-        self.data_root = cfg.ROOT_DIR / self.dataset_cfg.DATA_ROOT
+        self.data_root = Path(self.dataset_cfg.DATA_ROOT)
         self.data_path = self.data_root / self.dataset_cfg.SPLIT_DIR[self.mode]
 
         self.infos = self.get_all_infos(self.data_root / self.dataset_cfg.INFO_FILE[self.mode])
@@ -146,6 +145,7 @@ class WaymoDataset(DatasetTemplate):
             ret_dict['map_polylines'] = map_polylines_data
             ret_dict['map_polylines_mask'] = (map_polylines_mask > 0)
             ret_dict['map_polylines_center'] = map_polylines_center
+            # ret_dict['map_infos'] = info['map_infos']
 
         return ret_dict
 
@@ -287,7 +287,8 @@ class WaymoDataset(DatasetTemplate):
 
         ## generate the attributes for each object
         object_onehot_mask = torch.zeros((num_center_objects, num_objects, num_timestamps, 5))
-        object_onehot_mask[:, obj_types == 'TYPE_VEHICLE', :, 0] = 1
+        obj_types_vehicle = obj_types == 'TYPE_VEHICLE'
+        object_onehot_mask[:, obj_types_vehicle, :, 0] = 1
         object_onehot_mask[:, obj_types == 'TYPE_PEDESTRAIN', :, 1] = 1  # TODO: CHECK THIS TYPO
         object_onehot_mask[:, obj_types == 'TYPE_CYCLIST', :, 2] = 1
         object_onehot_mask[torch.arange(num_center_objects), center_indices, :, 3] = 1
