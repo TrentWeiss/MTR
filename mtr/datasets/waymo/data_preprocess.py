@@ -7,6 +7,7 @@
 import sys, os
 import numpy as np
 import pickle
+import shutil
 
 import yaml
 import tensorflow as tf
@@ -177,22 +178,23 @@ def process_waymo_data_with_scenario_proto(data_file, output_path=None):
     dataset : tf.data.TFRecordDataset = tf.data.TFRecordDataset(data_file, compression_type='')
     ret_infos = []
     dataset_enumerated = enumerate(dataset)
-    print("Processing datafile %s" % (data_file,))
-    data_dir = os.path.dirname(data_file)
+    print("Processing datafile %s" % (data_file,), flush=True)
+    data_file_dir = os.path.dirname(data_file)
     data_file_base = os.path.basename(data_file)
-    _, data_file_ext = os.path.splitext(data_file_base)
-    deepracing_metadata_file = os.path.join(data_dir, data_file_ext[1:]+".metadata.yaml")
+    deepracing_metadata_dir = os.path.abspath(os.path.join(data_file_dir,"..","..", "metadata"))
+    deepracing_metadata_file = os.path.join(deepracing_metadata_dir, data_file_base+ ".metadata.yaml")
     with open(deepracing_metadata_file, "r") as f:
         deepracing_metadata : dict = yaml.load(f, Loader=yaml.SafeLoader)
-    idx_start : int =deepracing_metadata["idx_start"]
-    deepracing_file : str =deepracing_metadata["deepracing_file"]
+
     for cnt, data in dataset_enumerated:
         info = {}
+        info_meta = {}
         scenario = scenario_pb2.Scenario()
         scenario.ParseFromString(bytearray(data.numpy()))
 
-        info['deepracing_idx'] = idx_start + cnt
-        info['deepracing_file'] = deepracing_file
+        info_meta['index'] = deepracing_metadata["idx_start"] + cnt
+        info_meta['deepracing_file'] = deepracing_metadata["deepracing_file"]
+        # info_meta['deepracing_file'] = deepracing_file
         info['scenario_id'] = scenario.scenario_id
         info['timestamps_seconds'] = list(scenario.timestamps_seconds)  # list of int of shape (91)
         # print("scenario.current_time_index: %s" % (str(scenario.current_time_index),))
@@ -219,6 +221,9 @@ def process_waymo_data_with_scenario_proto(data_file, output_path=None):
         }
         save_infos.update(info)
 
+        output_meta_file = os.path.join(output_path, f'sample_{scenario.scenario_id}.metadata.yaml')
+        with open(output_meta_file, 'w') as f:
+            yaml.dump(info_meta, f, Dumper=yaml.SafeDumper)
         output_file = os.path.join(output_path, f'sample_{scenario.scenario_id}.pkl')
         with open(output_file, 'wb') as f:
             pickle.dump(save_infos, f)
@@ -252,6 +257,8 @@ def get_infos_from_protos(data_path, output_path=None, num_workers=8):
 def create_infos_from_protos(raw_data_path, output_path, num_workers=16, spawn=False):
     if spawn:
         multiprocessing.set_start_method("spawn")
+    if os.path.isdir(output_path):
+        shutil.rmtree(output_path)
     train_infos = get_infos_from_protos(
         data_path=os.path.join(raw_data_path, 'training'),
         output_path=os.path.join(output_path, 'processed_scenarios_training'),
