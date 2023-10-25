@@ -178,6 +178,8 @@ def go(comet_experiment : str, tempdir : str, batch_size : int, save_every : int
     with open(fp, "r") as f:
         config = easydict.EasyDict(yaml.load(f, Loader=yaml.SafeLoader))
     print(config)
+    if gpu_index>0:
+        torch.cuda.set_device(torch.device("cuda:%d" % (gpu_index,)))
 
     logger = create_logger()
     dist = False
