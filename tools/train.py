@@ -21,17 +21,20 @@ import torch.optim.lr_scheduler as lr_sched
 from tensorboardX import SummaryWriter
 
 from mtr.datasets import build_dataloader
-from mtr.config import cfg, cfg_from_list, cfg_from_yaml_file, log_config_to_file
+from mtr.config import cfg, cfg_from_list, cfg_from_yaml_file, log_config_to_file, merge_new_config
 from mtr.utils import common_utils
 from mtr.models import model as model_utils
 
 from train_utils.train_utils import train_model
 import torch.distributed as dist
+import comet_utils
+# import config_from_comet, generate_experiment, most_recent_model
 
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
     parser.add_argument('--cfg_file', type=str, default=None, help='specify the config for training')
+    parser.add_argument('--experiment', type=str, default=None, help='restart training from a specific experiment')
 
     parser.add_argument('--batch_size', type=int, default=None, required=False, help='batch size for training')
     parser.add_argument('--epochs', type=int, default=None, required=False, help='number of epochs to train for')
@@ -60,15 +63,27 @@ def parse_config():
 
     parser.add_argument('--add_worker_init_fn', action='store_true', default=False, help='')
     args = parser.parse_args()
-
-    cfg_from_yaml_file(args.cfg_file, cfg)
-    cfg.TAG = Path(args.cfg_file).stem
-    cfg.EXP_GROUP_PATH = '/'.join(args.cfg_file.split('/')[1:-1])  # remove 'cfgs' and 'xxxx.yaml'
+    if (args.cfg_file is None) and (args.experiment is None):
+        raise ValueError("Must specify one of --cfg_file or --experiment")
+    if (args.cfg_file is not None) and (args.experiment is not None):
+        raise ValueError("Can't specify both --cfg_file and --experiment")
+    experimentname : str | None = args.experiment
+    if experimentname is None:
+        cfgfile = args.cfg_file
+        cfg_from_yaml_file(cfgfile, cfg)
+        cfg.TAG = Path(cfgfile).stem
+        cfg.EXP_GROUP_PATH = '/'.join(cfgfile.split('/')[1:-1])  # remove 'cfgs' and 'xxxx.yaml'
+    else:
+        new_config, argdict = comet_utils.config_from_comet(experimentname)
+        merge_new_config(config=cfg, new_config=new_config)
+        original_config_file = argdict["cfg_file"]
+        cfg.TAG = Path(original_config_file).stem
+        cfg.EXP_GROUP_PATH = '/'.join(original_config_file.split('/')[1:-1])  # remove 'cfgs' and 'xxxx.yaml'
 
     if args.set_cfgs is not None:
         cfg_from_list(args.set_cfgs, cfg)
 
-    return args, cfg
+    return args, cfg, experimentname
 
 
 def build_optimizer(model, opt_cfg):
@@ -114,7 +129,7 @@ def build_scheduler(optimizer, dataloader, opt_cfg, total_epochs, total_iters_ea
 
 
 def main():
-    args, cfg = parse_config()
+    args, cfg, experimentname = parse_config()
     if args.launcher == 'none':
         dist_train = False
         total_gpus = 1
@@ -138,24 +153,14 @@ def main():
     if args.fix_random_seed:
         common_utils.set_random_seed(666)
     
-    comet_api_key=os.getenv("COMET_API_KEY")
-    broadcastlist = [None]
-    comet_experiment = None
-    if comet_api_key is None:
-        broadcastlist[0] = ""
+    if (os.getenv("COMET_API_KEY") is None):
+        comet_experiment = None
+        broadcastlist = ["",]
     else:
-        if (not dist_train) or (dist_train and cfg.LOCAL_RANK==0):
-            comet_experiment = comet_ml.Experiment(api_key=comet_api_key, workspace="electric-turtle", project_name="mtr-deepracing", auto_output_logging="simple")
-            comet_experiment.log_asset(args.cfg_file, file_name="config.yaml", overwrite=True, copy_to_tmp=False)
-            clusterfile = os.path.join(cfg.ROOT_DIR, cfg["MODEL"]["MOTION_DECODER"]["INTENTION_POINTS_FILE"])
-            comet_experiment.log_asset(clusterfile, file_name="clusters.pkl", overwrite=True, copy_to_tmp=False)
-            comet_outdir_postfix = "_" + comet_experiment.get_name()
-            broadcastlist[0]=comet_outdir_postfix
+        comet_experiment, broadcastlist = comet_utils.generate_experiment(experimentname, cfg, cfg_file = args.cfg_file)
         if dist_train:
+            print("Broadcast list: %d" % (cfg.LOCAL_RANK,))
             dist.broadcast_object_list(broadcastlist, src=0)
-
-
-
 
     output_dir_base : str | None = args.output_dir
     if output_dir_base is None:
@@ -167,7 +172,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     try:
-        if comet_experiment is not None:
+        if (comet_experiment is not None) and (type(comet_experiment) is not comet_ml.ExistingExperiment):
             argdict = vars(args)
             command_arg_file = os.path.join(output_dir, "command_line_args.yaml")
             with open(command_arg_file, "w") as f:
@@ -176,6 +181,7 @@ def main():
     except Exception as e:
         print("Couldn't save command line args. Underlying exception:\n%s" % (str(e),), file=sys.stderr)
     if dist_train:
+        print("Barrier: %d" % (cfg.LOCAL_RANK,))
         dist.barrier()
     log_file = output_dir / ('log_train_%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
     logger = common_utils.create_logger(log_file, rank=cfg.LOCAL_RANK)
@@ -190,8 +196,8 @@ def main():
     for key, val in vars(args).items():
         logger.info('{:16} {}'.format(key, val))
     log_config_to_file(cfg, logger=logger)
-    if cfg.LOCAL_RANK == 0:
-        os.system('cp %s %s' % (args.cfg_file, output_dir))
+    # if cfg.LOCAL_RANK == 0:
+    #     os.system('cp %s %s' % (args.cfg_file, output_dir))
     tb_log = SummaryWriter(log_dir=output_dir / 'tensorboard') if cfg.LOCAL_RANK == 0 else None
 
     
@@ -209,39 +215,24 @@ def main():
     model = model_utils.MotionTransformer(config=cfg.MODEL)
     if not args.without_sync_bn:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-    model.cuda()
-
+    model = model.cuda()
     optimizer = build_optimizer(model, cfg.OPTIMIZATION)
+
 
     # load checkpoint if it is possible
     start_epoch = it = 0
     last_epoch = -1
 
-    if args.pretrained_model is not None:
-        model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist_train, logger=logger)
-
-    if args.ckpt is not None:
-        it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist_train, optimizer=optimizer,
-                                                           logger=logger)
+    if experimentname is not None:
+        print("Loading model from comet: %d" % (cfg.LOCAL_RANK,))
+        model_checkpoint, optim_checkpoint, comet_epoch = comet_utils.most_recent_model(experimentname, map_location="cpu", logger=logger)
+        model.load_state_dict(model_checkpoint)
+        optimizer.load_state_dict(optim_checkpoint)
+        start_epoch = comet_epoch
         last_epoch = start_epoch + 1
-    # else:
-    #     ckpt_list = glob.glob(str(ckpt_dir / '*.pth'))
-    #     if len(ckpt_list) > 0:
-    #         ckpt_list.sort(key=os.path.getmtime)
-    #         while len(ckpt_list) > 0:
-    #             basename = os.path.basename(ckpt_list[-1])
-    #             if basename == 'best_model.pth':
-    #                 ckpt_list = ckpt_list[:-1]
-    #                 continue
-
-    #             try:
-    #                 it, start_epoch = model.load_params_with_optimizer(
-    #                     ckpt_list[-1], to_cpu=dist_train, optimizer=optimizer, logger=logger
-    #                 )
-    #                 last_epoch = start_epoch + 1
-    #                 break
-    #             except:
-    #                 ckpt_list = ckpt_list[:-1]
+    if dist_train:
+        print("Barrier: %d" % (cfg.LOCAL_RANK,))
+        dist.barrier()
 
     scheduler = build_scheduler(
         optimizer, train_loader, cfg.OPTIMIZATION, total_epochs=args.epochs,
@@ -265,33 +256,33 @@ def main():
     eval_output_dir = output_dir / 'eval' / 'eval_with_train'
     eval_output_dir.mkdir(parents=True, exist_ok=True)
 
-
     # -----------------------start training---------------------------
     logger.info('**********************Start training %s/%s(%s)**********************'
                 % (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
-    train_model(
-        model,
-        optimizer,
-        train_loader,
-        comet_experiment = comet_experiment,
-        optim_cfg=cfg.OPTIMIZATION,
-        start_epoch=start_epoch,
-        total_epochs=args.epochs,
-        start_iter=it,
-        rank=cfg.LOCAL_RANK,
-        ckpt_save_dir=ckpt_dir,
-        train_sampler=train_sampler,
-        ckpt_save_interval=args.ckpt_save_interval,
-        max_ckpt_save_num=args.max_ckpt_save_num,
-        merge_all_iters_to_one_epoch=args.merge_all_iters_to_one_epoch,
-        tb_log=tb_log,
-        scheduler=scheduler,
-        logger=logger,
-        eval_output_dir=eval_output_dir,
-        test_loader=test_loader if not args.not_eval_with_train else None,
-        cfg=cfg, dist_train=dist_train, logger_iter_interval=args.logger_iter_interval,
-        ckpt_save_time_interval=args.ckpt_save_time_interval
-    )
+    with comet_utils.local_context(comet_experiment, stage="train"):
+        train_model(
+            model,
+            optimizer,
+            train_loader,
+            comet_experiment = comet_experiment,
+            optim_cfg=cfg.OPTIMIZATION,
+            start_epoch=start_epoch,
+            total_epochs=args.epochs,
+            start_iter=it,
+            rank=cfg.LOCAL_RANK,
+            ckpt_save_dir=ckpt_dir,
+            train_sampler=train_sampler,
+            ckpt_save_interval=args.ckpt_save_interval,
+            max_ckpt_save_num=args.max_ckpt_save_num,
+            merge_all_iters_to_one_epoch=args.merge_all_iters_to_one_epoch,
+            tb_log=tb_log,
+            scheduler=scheduler,
+            logger=logger,
+            eval_output_dir=eval_output_dir,
+            test_loader=test_loader if not args.not_eval_with_train else None,
+            cfg=cfg, dist_train=dist_train, logger_iter_interval=args.logger_iter_interval,
+            ckpt_save_time_interval=args.ckpt_save_time_interval
+        )
 
     logger.info('**********************End training %s/%s(%s)**********************\n\n\n'
                 % (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))

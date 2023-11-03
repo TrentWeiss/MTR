@@ -78,7 +78,7 @@ class WaymoDataset(DatasetTemplate):
         """
         info = self.infos[index]
         scene_id = info['scenario_id']
-        with open(self.data_path / f'sample_{scene_id}.pkl', 'rb') as f:
+        with open(self.data_path / f'{scene_id}.pkl', 'rb') as f:
             info = pickle.load(f)
 
         sdc_track_index = info['sdc_track_index']

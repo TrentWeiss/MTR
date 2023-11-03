@@ -221,10 +221,10 @@ def process_waymo_data_with_scenario_proto(data_file, output_path=None):
         }
         save_infos.update(info)
 
-        output_meta_file = os.path.join(output_path, f'sample_{scenario.scenario_id}.metadata.yaml')
+        output_meta_file = os.path.join(output_path, f'{scenario.scenario_id}.metadata.yaml')
         with open(output_meta_file, 'w') as f:
             yaml.dump(info_meta, f, Dumper=yaml.SafeDumper)
-        output_file = os.path.join(output_path, f'sample_{scenario.scenario_id}.pkl')
+        output_file = os.path.join(output_path, f'{scenario.scenario_id}.pkl')
         with open(output_file, 'wb') as f:
             pickle.dump(save_infos, f)
             #["trajs"].shape

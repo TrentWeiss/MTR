@@ -127,11 +127,11 @@ def transform_preds_to_waymo_format(pred_dicts, top_k_for_eval=-1, eval_second=8
     batch_pred_trajs = np.zeros((num_scenario, num_max_objs_per_scene, topK, 1, num_frame_to_eval, 2))
     batch_pred_scores = np.zeros((num_scenario, num_max_objs_per_scene, topK))
     gt_trajs = np.zeros((num_scenario, num_max_objs_per_scene, num_frames_in_total, 7))
-    gt_is_valid = np.zeros((num_scenario, num_max_objs_per_scene, num_frames_in_total), dtype=np.int)
+    gt_is_valid = np.zeros((num_scenario, num_max_objs_per_scene, num_frames_in_total), dtype=np.int64)
     pred_gt_idxs = np.zeros((num_scenario, num_max_objs_per_scene, 1))
-    pred_gt_idx_valid_mask = np.zeros((num_scenario, num_max_objs_per_scene, 1), dtype=np.int)
+    pred_gt_idx_valid_mask = np.zeros((num_scenario, num_max_objs_per_scene, 1), dtype=np.int64)
     object_type = np.zeros((num_scenario, num_max_objs_per_scene), dtype=np.object)
-    object_id = np.zeros((num_scenario, num_max_objs_per_scene), dtype=np.int)
+    object_id = np.zeros((num_scenario, num_max_objs_per_scene), dtype=np.int64)
     scenario_id = np.zeros((num_scenario), dtype=np.object)
 
     object_type_cnt_dict = {}
