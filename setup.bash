@@ -1,4 +1,5 @@
 #!/bin/bash
+source ~/cuda11_init
 scriptpath=$(cd $(dirname "${BASH_SOURCE:-$0}") && pwd)
 export PYTHONPATH=${scriptpath}:${PYTHONPATH}
 pyversion=$(python3 -c "import sys; print(str(sys.version_info.major)+str(sys.version_info.minor))")

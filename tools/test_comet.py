@@ -194,7 +194,9 @@ def go(comet_experiment : str, tempdir : str, batch_size : int, save_every : int
         ckpt = torch.load(f)
         state_dict = ckpt["model_state"]
     this_file_dir = os.path.dirname(__file__)
-    main_plot_dir = os.path.normpath(os.path.join(this_file_dir, "..", "output"))
+    main_plot_dir = os.path.normpath(os.path.join(this_file_dir, "..", "output", comet_experiment))
+    shutil.copyfile(fp, os.path.join(main_plot_dir, "config.yaml"))
+    
     plot_dir = os.path.join(main_plot_dir, "test_plots")
     model = mtr.models.model.MotionTransformer(config["MODEL"]).eval()
     model.load_state_dict(state_dict)
@@ -230,13 +232,14 @@ def go(comet_experiment : str, tempdir : str, batch_size : int, save_every : int
 if __name__=="__main__":
     import argparse
     print("Hello comet test!")
-    parser : argparse.ArgumentParser = argparse.ArgumentParser(prog="mtr_comet_test", description="Test dat MTR from comet")
+    parser : argparse.ArgumentParser = argparse.ArgumentParser(prog="mtr_comet_test", 
+                                                               description="Test dat MTR from comet",
+                                                               formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--experiment", type=str, required=True)
-    parser.add_argument("--tempdir", type=str, default="/bigtemp/ttw2xk/comet_dump/MTR/deepracing/mtr+100_percent_data")
+    parser.add_argument("--tempdir", type=str, default=os.path.join(os.getenv("BIGTEMP"), "comet_dump", "MTR", "deepracing", "mtr+100_percent_data"))
     parser.add_argument("--save-every", type=int, default=-1)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--tqdm", action="store_true")
     args = parser.parse_args()
-
     go(args.experiment, args.tempdir, args.batch_size, args.save_every, args.tqdm, args.gpu)

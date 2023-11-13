@@ -255,10 +255,11 @@ def get_infos_from_protos(data_path, output_path=None, num_workers=8):
 
 
 def create_infos_from_protos(raw_data_path, output_path, num_workers=16, spawn=False):
+    if os.path.isdir(output_path):
+        print("Purging old data.", flush=True)
+        shutil.rmtree(output_path)
     if spawn:
         multiprocessing.set_start_method("spawn")
-    if os.path.isdir(output_path):
-        shutil.rmtree(output_path)
     train_infos = get_infos_from_protos(
         data_path=os.path.join(raw_data_path, 'training'),
         output_path=os.path.join(output_path, 'processed_scenarios_training'),
