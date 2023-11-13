@@ -23,7 +23,7 @@ def get_binary_asset(experiment : str | comet_ml.APIExperiment, filename : str):
     return asset
 
 
-def get_yaml_asset(experiment : str | comet_ml.APIExperiment, filename : str):
+def get_yaml_asset(experiment : str | comet_ml.APIExperiment, filename : str, raw=False):
     if type(experiment) is str:
         api : comet_ml.API = comet_ml.API(api_key=os.environ["COMET_API_KEY"])
         apiexperiment : comet_ml.APIExperiment = api.get_experiment("electric-turtle", "mtr-deepracing", experiment)
@@ -36,7 +36,10 @@ def get_yaml_asset(experiment : str | comet_ml.APIExperiment, filename : str):
             assetid=asset["assetId"]
             break
     asset = apiexperiment.get_asset(assetid, return_type="binary")
-    return yaml.safe_load(str(asset, encoding="ascii"))
+    yamlstring = str(asset, encoding="ascii")
+    if raw:
+        return yamlstring
+    return yaml.safe_load(yamlstring)
 
 def get_statedict_asset(experiment : str | comet_ml.APIExperiment, filename : str, map_location : torch.device | str = "cpu"):
     binaryasset = get_binary_asset(experiment, filename)

@@ -14,6 +14,9 @@ import shutil
 import time
 import tqdm
 import deepracing_models.math_utils
+import comet_ml
+from comet_utils import get_yaml_asset
+import io
 
 def create_logger(log_file=None, rank=0, log_level=logging.INFO):
     logger = logging.getLogger(__name__)
@@ -33,9 +36,9 @@ def test_model(model : mtr.models.model.MotionTransformer,
                val_loader : torchdata.DataLoader, 
                plotdir : str, 
                save_every = -1, with_tqdm = True):
-    if os.path.isdir(plotdir):
-        shutil.rmtree(plotdir)
-    os.makedirs(plotdir)
+    # if os.path.isdir(plotdir):
+    #     shutil.rmtree(plotdir)
+    os.makedirs(plotdir, exist_ok=True)
     num_samples = len(val_loader.dataset)
     batch_size = val_loader.batch_size
     first_param : torch.nn.Parameter = next(model.parameters())
@@ -173,13 +176,21 @@ def test_model(model : mtr.models.model.MotionTransformer,
             "computation_time_stdev" : float(np.std(computation_time_array)),
         }, f, Dumper=yaml.SafeDumper)
     return min_ade_array.cpu(), lateral_error_array, longitudinal_error_array, computation_time_array
-def go(comet_experiment : str, tempdir : str, batch_size : int, save_every : int, with_tqdm : bool, gpu_index : int):
-    fp = os.path.join(this_dir, "cfgs", "deepracing", "mtr+100_percent_data.yaml" )
-    with open(fp, "r") as f:
-        config = easydict.EasyDict(yaml.load(f, Loader=yaml.SafeLoader))
-    print(config)
-    if gpu_index>0:
-        torch.cuda.set_device(torch.device("cuda:%d" % (gpu_index,)))
+def go(comet_experiment : str, batch_size : int, save_every : int, with_tqdm : bool, gpu_index : int):
+
+    api : comet_ml.API = comet_ml.API(api_key=os.getenv("COMET_API_KEY"))
+    api_experiment : comet_ml.APIExperiment = api.get(workspace="electric-turtle", project_name="mtr-deepracing", experiment=comet_experiment)
+    asset_list = api_experiment.get_asset_list()
+    net_assets = []
+    config_asset = None
+    for asset in asset_list:
+        if "model_" in asset["fileName"]:
+            net_assets.append(asset)
+        elif asset["fileName"]=="config.yaml":
+            config_asset = asset
+    net_assets = sorted(net_assets, key=lambda a : a["step"])
+    configstring = str(api_experiment.get_asset(config_asset["assetId"], return_type="binary"), encoding="ascii")
+    config = easydict.EasyDict(yaml.safe_load(io.StringIO(configstring)))
 
     logger = create_logger()
     dist = False
@@ -188,20 +199,16 @@ def go(comet_experiment : str, tempdir : str, batch_size : int, save_every : int
                                     training=False, workers=0, logger=logger, total_epochs=1)
     num_samples = len(val_set)
 
-    model_dir = os.path.join(tempdir, "default_%s" % (comet_experiment,), "ckpt")
-    model_file = os.path.join(model_dir, "latest_model.pth")
-    with open(model_file, "rb") as f:
-        ckpt = torch.load(f)
-        state_dict = ckpt["model_state"]
+    net_binary = api_experiment.get_asset(net_assets[-2]["assetId"], return_type="binary")
+    net_bytesio = io.BytesIO(net_binary)
+    model = mtr.models.model.MotionTransformer(config["MODEL"]).eval()
+    model.load_state_dict(torch.load(net_bytesio, map_location="cpu"))
+    torch.cuda.set_device(torch.device("cuda:%d" % (gpu_index,)))
+    model.cuda()
+
     this_file_dir = os.path.dirname(__file__)
     main_plot_dir = os.path.normpath(os.path.join(this_file_dir, "..", "output", comet_experiment))
-    shutil.copyfile(fp, os.path.join(main_plot_dir, "config.yaml"))
-    
     plot_dir = os.path.join(main_plot_dir, "test_plots")
-    model = mtr.models.model.MotionTransformer(config["MODEL"]).eval()
-    model.load_state_dict(state_dict)
-    model.cuda(gpu_index)
-
     min_ade_array, lateral_error_array, longitudinal_error_array, computation_time_array = \
         test_model(model, val_loader, plot_dir, save_every=save_every, with_tqdm=with_tqdm)
     
@@ -236,10 +243,9 @@ if __name__=="__main__":
                                                                description="Test dat MTR from comet",
                                                                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--experiment", type=str, required=True)
-    parser.add_argument("--tempdir", type=str, default=os.path.join(os.getenv("BIGTEMP"), "comet_dump", "MTR", "deepracing", "mtr+100_percent_data"))
     parser.add_argument("--save-every", type=int, default=-1)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--tqdm", action="store_true")
     args = parser.parse_args()
-    go(args.experiment, args.tempdir, args.batch_size, args.save_every, args.tqdm, args.gpu)
+    go(args.experiment, args.batch_size, args.save_every, args.tqdm, args.gpu)
