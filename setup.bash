@@ -1,7 +1,12 @@
 #!/bin/bash
 source ~/cuda11_init
 scriptpath=$(cd $(dirname "${BASH_SOURCE:-$0}") && pwd)
-export PYTHONPATH=${scriptpath}:${PYTHONPATH}
+if [ -z ${PYTHONPATH} ]
+then
+    export PYTHONPATH=${scriptpath}
+else
+    export PYTHONPATH=${scriptpath}:${PYTHONPATH}
+fi
 pyversion=$(python3 -c "import sys; print(str(sys.version_info.major)+str(sys.version_info.minor))")
 extraldpaths=${scriptpath}/build/lib.linux-x86_64-cpython-${pyversion}/mtr/ops/attention:${scriptpath}/build/lib.linux-x86_64-cpython-${pyversion}/mtr/ops/knn
 if [ -z ${LD_LIBRARY_PATH} ]
