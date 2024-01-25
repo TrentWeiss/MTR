@@ -52,18 +52,24 @@ def most_recent_model(experiment : str | comet_ml.APIExperiment, map_location : 
         apiexperiment : comet_ml.APIExperiment = api.get_experiment("electric-turtle", "mtr-deepracing", experiment)
     else:
         apiexperiment = experiment
-    apiexperiment.get_parameters_summary(parameter="curr_epoch")
-    epoch_summary = apiexperiment.get_parameters_summary(parameter="curr_epoch")
-    epochval = int(epoch_summary["valueCurrent"])
-    model_file = "model_epoch_%d.pt" % (epochval-1,)
-    optimizer_file = "optimizer_epoch_%d.pt" % (epochval-1,)
+    # apiexperiment.get_parameters_summary(parameter="curr_epoch")
+    assetlist = apiexperiment.get_asset_list()
+    netassets = [a for a in assetlist if "model_" in a['fileName']]
+    sortednetassets = sorted(netassets, key=lambda a : a["step"])
+
+    model_file : str = (sortednetassets[-1])["fileName"]
+    optimizer_file = model_file.replace("model_", "optimizer_")
+    checkpoint_epoch = int(model_file.replace("model_epoch_","").replace(".pt",""))
+    
+
+    
     if logger is not None:
         logger.info("Getting model state dict")
     model_state_dict = get_statedict_asset(apiexperiment, model_file, map_location=map_location)
     if logger is not None:
         logger.info("Getting optimizer state dict")
     optimizer_state_dict = get_statedict_asset(apiexperiment, optimizer_file, map_location=map_location)
-    return model_state_dict, optimizer_state_dict, epochval
+    return model_state_dict, optimizer_state_dict, checkpoint_epoch+1
 
 def config_from_comet(experiment : str | comet_ml.APIExperiment):
     if type(experiment) is str:
