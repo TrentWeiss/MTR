@@ -161,7 +161,7 @@ def train_model(model, optimizer, train_loader, optim_cfg,
 
             # save trained model
             trained_epoch = cur_epoch + 1
-            if (trained_epoch in [1,2,5]) or (trained_epoch % ckpt_save_interval ) == 0:
+            if (trained_epoch in [1,2,3]) or (trained_epoch % ckpt_save_interval ) == 0:
 
                 print("Saving checkpoint")
                 ckpt_list = glob.glob(str(ckpt_save_dir / 'checkpoint_epoch_*.pth'))

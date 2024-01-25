@@ -4,16 +4,19 @@ DATA_CONFIG:
     DATA_ROOT: '/p/DeepRacing/unpacked_datasets/local_fitting/v1/mtr_format/1second'
     SPLIT_DIR: {
         'train': 'processed_scenarios_training', 
-        'test': 'processed_scenarios_validation'
+        'val': 'processed_scenarios_validation', 
+        'test': 'processed_scenarios_test'
     }
 
     INFO_FILE: {
         'train': 'processed_scenarios_training_infos.pkl', 
-        'test': 'processed_scenarios_val_infos.pkl'
+        'val': 'processed_scenarios_val_infos.pkl', 
+        'test': 'processed_scenarios_test_infos.pkl'
     }
 
     SAMPLE_INTERVAL: {
         'train': 1, 
+        'val': 1, 
         'test': 1
     }
 
