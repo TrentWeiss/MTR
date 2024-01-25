@@ -194,6 +194,7 @@ def process_waymo_data_with_scenario_proto(data_file, output_path=None):
 
         info_meta['index'] = deepracing_metadata["idx_start"] + cnt
         info_meta['deepracing_file'] = deepracing_metadata["deepracing_file"]
+        info_meta['deepracing_metadata'] = deepracing_metadata["deepracing_metadata"]
         # info_meta['deepracing_file'] = deepracing_file
         info['scenario_id'] = scenario.scenario_id
         info['timestamps_seconds'] = list(scenario.timestamps_seconds)  # list of int of shape (91)
@@ -255,11 +256,14 @@ def get_infos_from_protos(data_path, output_path=None, num_workers=8):
 
 
 def create_infos_from_protos(raw_data_path, output_path, num_workers=16, spawn=False):
+
+    if spawn:
+        multiprocessing.set_start_method("spawn")
+
     if os.path.isdir(output_path):
         print("Purging old data.", flush=True)
         shutil.rmtree(output_path)
-    if spawn:
-        multiprocessing.set_start_method("spawn")
+
     train_infos = get_infos_from_protos(
         data_path=os.path.join(raw_data_path, 'training'),
         output_path=os.path.join(output_path, 'processed_scenarios_training'),
@@ -279,6 +283,16 @@ def create_infos_from_protos(raw_data_path, output_path, num_workers=16, spawn=F
     with open(val_filename, 'wb') as f:
         pickle.dump(val_infos, f)
     print('----------------Waymo info val file is saved to %s----------------' % val_filename)
+
+    test_infos = get_infos_from_protos(
+        data_path=os.path.join(raw_data_path, 'testing'),
+        output_path=os.path.join(output_path, 'processed_scenarios_test'),
+        num_workers=num_workers
+    )
+    test_filename = os.path.join(output_path, 'processed_scenarios_test_infos.pkl')
+    with open(test_filename, 'wb') as f:
+        pickle.dump(test_infos, f)
+    print('----------------Waymo info test file is saved to %s----------------' % test_filename)
     
 
 if __name__ == '__main__':
