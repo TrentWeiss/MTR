@@ -60,7 +60,7 @@ MODEL:
         CENTER_OFFSET_OF_MAP: *center_offset
 
         NUM_FUTURE_FRAMES: 80
-        NUM_MOTION_MODES: 1
+        NUM_MOTION_MODES: 6
 
         INTENTION_POINTS_FILE: data/deepracing/cluster_64_center_dict.pkl
 
